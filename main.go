@@ -11,6 +11,25 @@ import (
 
 var Logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
+type lbStrat interface {
+	pickServer() string
+}
+
+type roundRobin struct {
+	count     int
+	addresses []string
+}
+
+func (rb *roundRobin) pickServer() string {
+	index := rb.count % len(rb.addresses)
+	rb.count++
+	return rb.addresses[index]
+}
+
+func pickServer(strat lbStrat) string {
+	return strat.pickServer()
+}
+
 func main() {
 	listener, err := net.Listen("tcp", "localhost:8080")
 	if err != nil {
@@ -18,7 +37,7 @@ func main() {
 		listener.Close()
 	}
 
-	servers := [3]string{"localhost:5000", "localhost:5001", "localhost:5002"}
+	servers := []string{"localhost:5000", "localhost:5001", "localhost:5002"}
 	for _, addr := range servers {
 		addr := addr
 		go server.Server(addr)
@@ -31,41 +50,42 @@ func main() {
 
 	Logger.Info(fmt.Sprintf("Listening on host: %v, port: %v", host, port))
 
-	var reqCounter int
+	handleConnection(listener, servers)
+}
+
+func handleConnection(listener net.Listener, servers []string) {
+	roundRobinStrat := &roundRobin{addresses: servers}
 
 	for {
-		conn, err := listener.Accept()
+		clientConn, err := listener.Accept()
 		if err != nil {
 			Logger.Error("Error accepting connection: %v", "err", err.Error())
 			continue
 		}
 
-		addr := servers[reqCounter%len(servers)]
-		reqCounter++
+		targetAddr := pickServer(roundRobinStrat)
 
-		go handleConnection(conn, addr)
+		go func() {
+			targetConn, err := net.Dial("tcp", targetAddr)
+			if err != nil {
+				Logger.Error("Error connecting to target server", "err", err.Error(), "target", targetAddr)
+			}
+
+			go func() {
+				defer clientConn.Close()
+				defer targetConn.Close()
+
+				Logger.Info("Client -> Target")
+				io.Copy(targetConn, clientConn)
+			}()
+
+			go func() {
+				defer clientConn.Close()
+				defer targetConn.Close()
+
+				Logger.Info("Target -> Client")
+				io.Copy(clientConn, targetConn)
+			}()
+		}()
 	}
-}
-
-func handleConnection(clientConn net.Conn, targetAddr string) {
-	targetConn, err := net.Dial("tcp", targetAddr)
-	if err != nil {
-		Logger.Error("Error connecting to target server", "err", err.Error(), "target", targetAddr)
-	}
-
-	go func() {
-		defer clientConn.Close()
-		defer targetConn.Close()
-
-		Logger.Info("Client -> Target")
-		io.Copy(targetConn, clientConn)
-	}()
-
-	go func() {
-		defer clientConn.Close()
-		defer targetConn.Close()
-
-		Logger.Info("Target -> Client")
-		io.Copy(clientConn, targetConn)
-	}()
 }
