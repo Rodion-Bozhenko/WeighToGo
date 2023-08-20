@@ -6,29 +6,21 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"weightogo/server"
+	serv "weightogo/server"
 )
 
 var Logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-type lbStrat interface {
-	pickServer() string
+type loadBalancer interface {
+	pickServer() *server
 }
 
-type roundRobin struct {
-	count     int
-	addresses []string
-}
+type Strategy string
 
-func (rb *roundRobin) pickServer() string {
-	index := rb.count % len(rb.addresses)
-	rb.count++
-	return rb.addresses[index]
-}
-
-func pickServer(strat lbStrat) string {
-	return strat.pickServer()
-}
+const (
+	RoundRobin         Strategy = "RoundRobin"
+	WeightedRoundRobin Strategy = "WeightedRoundRobin"
+)
 
 func main() {
 	listener, err := net.Listen("tcp", "localhost:8080")
@@ -37,10 +29,15 @@ func main() {
 		listener.Close()
 	}
 
-	servers := []string{"localhost:5000", "localhost:5001", "localhost:5002"}
-	for _, addr := range servers {
-		addr := addr
-		go server.Server(addr)
+	servers := []server{
+		{address: "localhost:5000", weight: 1},
+		{address: "localhost:5001", weight: 5},
+		{address: "localhost:5002", weight: 1},
+	}
+
+	for _, s := range servers {
+		addr := s.address
+		go serv.Server(addr)
 	}
 
 	host, port, err := net.SplitHostPort(listener.Addr().String())
@@ -50,11 +47,11 @@ func main() {
 
 	Logger.Info(fmt.Sprintf("Listening on host: %v, port: %v", host, port))
 
-	handleConnection(listener, servers)
+	handleConnection(listener, servers, WeightedRoundRobin)
 }
 
-func handleConnection(listener net.Listener, servers []string) {
-	roundRobinStrat := &roundRobin{addresses: servers}
+func handleConnection(listener net.Listener, servers []server, strategy Strategy) {
+	loadBalancer := getLoadBalancer(strategy, servers)
 
 	for {
 		clientConn, err := listener.Accept()
@@ -63,7 +60,8 @@ func handleConnection(listener net.Listener, servers []string) {
 			continue
 		}
 
-		targetAddr := pickServer(roundRobinStrat)
+		targetServer := loadBalancer.pickServer()
+		targetAddr := targetServer.address
 
 		go func() {
 			targetConn, err := net.Dial("tcp", targetAddr)
@@ -87,5 +85,16 @@ func handleConnection(listener net.Listener, servers []string) {
 				io.Copy(clientConn, targetConn)
 			}()
 		}()
+	}
+}
+
+func getLoadBalancer(strategy Strategy, servers []server) loadBalancer {
+	switch strategy {
+	case RoundRobin:
+		return &roundRobinLoadBalancer{servers: servers, count: 0}
+	case WeightedRoundRobin:
+		return &smoothedLoadBalancer{servers: servers}
+	default:
+		return &roundRobinLoadBalancer{servers: servers, count: 0}
 	}
 }
