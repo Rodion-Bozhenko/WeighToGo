@@ -1,13 +1,15 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 )
 
-func Server() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("SUCK DIZ NUTS"))
+func Server(addr string) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(fmt.Sprintf("Response from :%v\n", addr)))
 	})
 
-	http.ListenAndServe("localhost:5000", nil)
+	http.ListenAndServe(addr, mux)
 }
