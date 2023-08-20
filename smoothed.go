@@ -1,11 +1,5 @@
 package main
 
-type server struct {
-	address       string
-	weight        int
-	currentWeight int
-}
-
 type smoothedLoadBalancer struct {
 	servers []server
 }
