@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -17,14 +18,20 @@ func main() {
 		listener.Close()
 	}
 
-	go server.Server()
+	servers := [3]string{"localhost:5000", "localhost:5001", "localhost:5002"}
+	for _, addr := range servers {
+		addr := addr
+		go server.Server(addr)
+	}
 
 	host, port, err := net.SplitHostPort(listener.Addr().String())
 	if err != nil {
 		Logger.Warn("Error retrieving host/port", "err", err.Error())
 	}
 
-	Logger.Info("Listening on host: %v, port: %v", host, port)
+	Logger.Info(fmt.Sprintf("Listening on host: %v, port: %v", host, port))
+
+	var reqCounter int
 
 	for {
 		conn, err := listener.Accept()
@@ -33,7 +40,10 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn, "localhost:5000")
+		addr := servers[reqCounter%len(servers)]
+		reqCounter++
+
+		go handleConnection(conn, addr)
 	}
 }
 
