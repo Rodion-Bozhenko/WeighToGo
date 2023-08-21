@@ -18,9 +18,10 @@ func (s *server) decreaseConnections() {
 
 func (lb *leastConnectionsLoadBalancer) pickServer() *server {
 	var best *server
-	for _, s := range lb.servers {
+	for i := 0; i < len(lb.servers); i++ {
+		s := &lb.servers[i]
 		if best == nil || s.activeConnections < best.activeConnections {
-			best = &s
+			best = s
 		}
 	}
 
