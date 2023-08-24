@@ -1,18 +1,62 @@
 package main
 
 import (
-	"bytes"
+	"fmt"
 	"net"
+	"net/url"
+	"strings"
+	"sync"
 	"testing"
 	"time"
+	"weightogo/loadbalancer"
 )
 
 func TestIntegration(t *testing.T) {
-	// Server that echoes back whatever it receives
+	startEchoServers(t, servers)
+	go main()
+
+	// Time for servers to start
+	time.Sleep(2 * time.Second)
+
+	testData := []byte("test_data")
+	for i := 0; i < 10; i++ {
+		testLoadBalancer(t, "localhost:8080", testData)
+	}
+}
+
+func TestHealthcheckIntegration(t *testing.T) {
+	// Not running third server
+	startEchoServers(t, servers[:2])
+	time.Sleep(1 * time.Second)
+
+	go main()
+
+	// Time for servers to start
+	time.Sleep(2 * time.Second)
+
+	healthyServers := getHealthyServers(servers)
+	if len(healthyServers) != 2 {
+		t.Fatalf("Expected 2 healthy servers, got %d", len(healthyServers))
+	}
+	for _, server := range healthyServers {
+		if server.Address == "http://localhost:8002" {
+			t.Fatal("localhost:8002 should not be marked as healthy")
+		}
+	}
+}
+
+func startEchoServers(t *testing.T, servers []loadbalancer.Server) {
+	var wg sync.WaitGroup
+	errChan := make(chan error)
 	echoServer := func(addr string) {
-		listener, err := net.Listen("tcp", addr)
+		parsedUrl, _ := url.Parse(addr)
+		host := parsedUrl.Hostname()
+		port := parsedUrl.Port()
+		address := fmt.Sprintf("%s:%s", host, port)
+
+		listener, err := net.Listen("tcp", address)
 		if err != nil {
-			t.Fatalf("Error setting up echo server: %v", err)
+			errChan <- err
 			return
 		}
 		defer listener.Close()
@@ -24,48 +68,63 @@ func TestIntegration(t *testing.T) {
 				return
 			}
 
-			go func(c net.Conn) {
-				defer c.Close()
+			wg.Add(1)
+			go func(conn net.Conn) {
+				defer wg.Done()
+				defer conn.Close()
 				buf := make([]byte, 1024)
 				for {
-					n, err := c.Read(buf)
+					n, err := conn.Read(buf)
 					if err != nil {
 						return
 					}
-					c.Write(buf[:n])
+					responseBody := string(buf)
+					responseHeaders := fmt.Sprintf("HTTP/1.1 200 OK\r\n"+
+						"Content-Length: %d\r\n"+
+						"Content-Type: text/plain\r\n"+
+						"\r\n", len(responseBody))
+
+					conn.Write([]byte(responseHeaders + responseBody[:n]))
 				}
 			}(conn)
 		}
 	}
 
-	for _, addr := range []string{"localhost:5000", "localhost:5001", "localhost:5002"} {
-		go echoServer(addr)
+	for _, s := range servers {
+		go echoServer(s.Address)
 	}
 
-	go main()
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
 
-	// Giving some time for servers and the main listener to start
-	time.Sleep(2 * time.Second)
-
-	// Connect to the main application and send/receive data
-	testData := []byte("test_data")
-	for i := 0; i < 10; i++ {
-		conn, err := net.Dial("tcp", "localhost:8080")
+	for err := range errChan {
 		if err != nil {
-			t.Fatalf("Failed to connect: %v", err)
+			t.Fatalf("Error setting up echo server: %v", err)
 		}
-		defer conn.Close()
+	}
+}
 
-		conn.Write(testData)
+func testLoadBalancer(t *testing.T, address string, testData []byte) {
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer conn.Close()
 
-		buf := make([]byte, len(testData))
-		_, err = conn.Read(buf)
-		if err != nil {
-			t.Fatalf("Failed to read from connection: %v", err)
-		}
+	conn.Write(testData)
 
-		if !bytes.Equal(buf, testData) {
-			t.Fatalf("Expected %s, got %s", testData, buf)
-		}
+	buf := make([]byte, 1000)
+	_, err = conn.Read(buf)
+	if err != nil {
+		t.Fatalf("Failed to read from connection: %v", err)
+	}
+
+	resp := strings.Split(string(buf), "\n")
+	respBody := resp[len(resp)-1]
+
+	if strings.Compare(respBody, string(testData)) == 0 {
+		t.Fatalf("Expected %s, got %s", testData, respBody)
 	}
 }
