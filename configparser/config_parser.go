@@ -23,11 +23,13 @@ type Config struct {
 }
 
 type BackendServer struct {
-	Address     string        `yaml:"address"`
-	Weight      int           `yaml:"weight"`
-	MaxConn     int           `yaml:"max_connections"`
-	HC_Endpoint string        `yaml:"hc_endpoint"`
-	HC_Interval time.Duration `yaml:"hc_interval"`
+	Address           string        `yaml:"address"`
+	Weight            int           `yaml:"weight"`
+	MaxConn           int           `yaml:"max_connections"`
+	HC_Endpoint       string        `yaml:"hc_endpoint"`
+	HC_Interval       time.Duration `yaml:"hc_interval"`
+	CurrentWeight     int
+	ActiveConnections int64
 }
 
 type HealthCheck struct {

@@ -4,9 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/url"
 	"weightogo/loadbalancer"
-	"weightogo/logger"
 )
 
 type ConnectionHandler struct {
@@ -32,11 +30,7 @@ func (ch *ConnectionHandler) HandleConnection() {
 		}
 
 		targetServer := ch.LoadBalancer.PickServer()
-		url, err := url.Parse(targetServer.Address)
-		if err != nil {
-			logger.Logger.Error("Error parsing target server address", "err", err)
-		}
-		targetAddr := url.Hostname() + ":" + url.Port()
+		targetAddr := targetServer.Address
 		targetServer.IncreaseConnections()
 
 		go func() {
