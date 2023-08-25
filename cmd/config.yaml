@@ -8,12 +8,12 @@ backend_servers:
   - address: "localhost:7230"
     weight: 1
     max_connections: 2000
-    hc_endpoint: "/healthz"
+    hc_endpoint: "/health"
     hc_interval: 10s
   - address: "localhost:9001"
     weight: 5
     max_connections: 1000
-    hc_endpoint: "/status"
+    hc_endpoint: "/health"
     hc_interval: 15s
   - address: "localhost:8002"
     weight: 5

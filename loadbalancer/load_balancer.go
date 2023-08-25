@@ -1,10 +1,14 @@
 package loadbalancer
 
+import "time"
+
 type Server struct {
 	Address           string
 	Weight            int
 	CurrentWeight     int
 	ActiveConnections int64
+	HC_Endpoint       string
+	HC_Interval       time.Duration
 }
 
 type LoadBalancer interface {
