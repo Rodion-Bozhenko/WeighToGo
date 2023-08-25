@@ -36,7 +36,7 @@ func startServers(servers []loadbalancer.Server, wg *sync.WaitGroup) {
 func main() {
 	config, err := configparser.ParseConfig()
 	if err != nil {
-		logger.Logger.Error("Cannot parse config", "err", err)
+		logger.Logger.Error("Config is not valid.", "err", err)
 		os.Exit(1)
 	}
 
