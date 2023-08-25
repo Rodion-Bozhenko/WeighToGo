@@ -3,21 +3,47 @@ package main
 import (
 	"fmt"
 	"net"
+	"net/http"
+	"net/url"
 	"sync"
 	"time"
+	"weightogo/configparser"
 	"weightogo/healthcheck"
 	"weightogo/loadbalancer"
 	"weightogo/logger"
 )
 
-var servers = []loadbalancer.Server{
-	{Address: "http://localhost:7230"},
-	{Address: "http://localhost:9001"},
-	{Address: "http://localhost:8002"},
+func startServers(servers []loadbalancer.Server, wg *sync.WaitGroup) {
+	for _, s := range servers {
+		wg.Add(1)
+		go func(address string) {
+			defer wg.Done()
+			mux := http.NewServeMux()
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				respBody := fmt.Sprintf("Hello from %s", s.Address)
+				w.Write([]byte(respBody))
+			})
+
+			url, _ := url.Parse(address)
+			addr := url.Hostname() + ":" + url.Port()
+			http.ListenAndServe(addr, mux)
+		}(s.Address)
+	}
 }
 
 func main() {
-	listener, err := net.Listen("tcp", "localhost:8080")
+	config, err := configparser.ParseConfig()
+	if err != nil {
+		logger.Logger.Error("Cannot parse config", "err", err)
+	}
+
+	servers := config.BackendServers
+
+	var wg sync.WaitGroup
+	go startServers(servers, &wg)
+	wg.Wait()
+
+	listener, err := net.Listen("tcp", config.General.BindAddress)
 	if err != nil {
 		logger.Logger.Error("Error setting up listener", "err", err.Error())
 		listener.Close()
@@ -37,6 +63,7 @@ func main() {
 		logger.Logger.Error("No available servers. Health check failed on each server.")
 		return
 	}
+
 	lb := loadbalancer.GetLoadBalancer(loadbalancer.LeastConnections, aliveServers)
 	connectionHandler := NewConnectionHandler(listener, lb, logger.Logger)
 

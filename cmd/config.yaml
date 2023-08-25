@@ -1,0 +1,31 @@
+general:
+  bind_address: "localhost:8080"
+  log_level: "INFO"
+  max_connections: 5000
+  connection_timeout: 30s
+
+backend_servers:
+  - address: "localhost:7230"
+    weight: 1
+    max_connections: 2000
+    hc_endpoint: "/healthz"
+    hc_interval: 10s
+  - address: "localhost:9001"
+    weight: 5
+    max_connections: 1000
+    hc_endpoint: "/status"
+    hc_interval: 15s
+  - address: "localhost:8002"
+    weight: 5
+    max_connections: 1000
+    hc_endpoint: "/status"
+    hc_interval: 15s
+
+strategy: "RoundRobin"
+
+health_check:
+  enabled: true
+  interval: 10s
+  timeout: 5s
+  unhealthy_threshold: 3
+  healthy_threshold: 2

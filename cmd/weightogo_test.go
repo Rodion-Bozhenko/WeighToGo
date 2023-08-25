@@ -11,6 +11,12 @@ import (
 	"weightogo/loadbalancer"
 )
 
+var servers = []loadbalancer.Server{
+	{Address: "http://localhost:7230"},
+	{Address: "http://localhost:9001"},
+	{Address: "http://localhost:8002"},
+}
+
 func TestIntegration(t *testing.T) {
 	startEchoServers(t, servers)
 	go main()
