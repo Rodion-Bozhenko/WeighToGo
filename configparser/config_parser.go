@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"time"
+	"weightogo/loadbalancer"
 	"weightogo/logger"
 
 	"gopkg.in/yaml.v3"
@@ -18,9 +19,9 @@ type Config struct {
 		MaxConn     int           `yaml:"max_connections"`
 		ConnTimeout time.Duration `yaml:"connection_timeout"`
 	}
-	BackendServers []BackendServer `yaml:"backend_servers"`
-	Strategy       string          `yaml:"strategy"`
-	HealthCheck    HealthCheck     `yaml:"health_check"`
+	BackendServers []BackendServer       `yaml:"backend_servers"`
+	Strategy       loadbalancer.Strategy `yaml:"strategy"`
+	HealthCheck    HealthCheck           `yaml:"health_check"`
 }
 
 type BackendServer struct {
@@ -83,5 +84,19 @@ func validateConfig(cfg *Config) error {
 		}
 	}
 
+	if !isValidStrategy(cfg.Strategy) {
+		validStrategies := fmt.Sprintf("%s, %s, %s", loadbalancer.RoundRobin, loadbalancer.WeightedRoundRobin, loadbalancer.LeastConnections)
+		return errors.New(fmt.Sprintf("Provided strategy %s is invalid. Valid strategies: %s.", cfg.Strategy, validStrategies))
+	}
+
 	return nil
+}
+
+func isValidStrategy(strategy loadbalancer.Strategy) bool {
+	switch strategy {
+	case loadbalancer.RoundRobin, loadbalancer.WeightedRoundRobin, loadbalancer.LeastConnections:
+		return true
+	default:
+		return false
+	}
 }

@@ -76,7 +76,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	lb := loadbalancer.GetLoadBalancer(loadbalancer.LeastConnections, aliveServers)
+	lb := loadbalancer.GetLoadBalancer(config.Strategy, aliveServers)
 	connectionHandler := NewConnectionHandler(listener, lb, logger.Logger)
 
 	connectionHandler.HandleConnection()

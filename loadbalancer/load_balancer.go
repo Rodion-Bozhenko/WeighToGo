@@ -1,6 +1,8 @@
 package loadbalancer
 
-import "time"
+import (
+	"time"
+)
 
 type Server struct {
 	Address           string
