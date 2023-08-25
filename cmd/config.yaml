@@ -21,7 +21,7 @@ backend_servers:
     hc_endpoint: "/status"
     hc_interval: 15s
 
-strategy: "RoundRobin"
+strategy: "LeastConnections"
 
 health_check:
   enabled: true
