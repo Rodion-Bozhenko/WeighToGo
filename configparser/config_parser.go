@@ -1,6 +1,7 @@
 package configparser
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -59,7 +60,28 @@ func ParseConfig() (Config, error) {
 		logger.Logger.Error("Cannot unmarshal config file.")
 		return Config{}, err
 	}
-	fmt.Printf("CONFIG:\n%+v\n\n", config)
+
+	if err := validateConfig(&config); err != nil {
+		return Config{}, err
+	}
 
 	return config, nil
+}
+
+func validateConfig(cfg *Config) error {
+	if cfg.General.BindAddress == "" {
+		return errors.New("Bind address wasn't provided.")
+	}
+
+	if len(cfg.BackendServers) == 0 {
+		return errors.New("Backend servers wasn't provided.")
+	}
+
+	for i, s := range cfg.BackendServers {
+		if s.Address == "" {
+			return errors.New(fmt.Sprintf("Miss address for backend server #%d.", i))
+		}
+	}
+
+	return nil
 }
