@@ -1,44 +1,46 @@
 package main
 
 import (
-	"fmt"
-	"net"
-	"net/url"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
-	"time"
+	"weightogo/configparser"
 	"weightogo/loadbalancer"
 )
 
-var servers = []loadbalancer.Server{
-	{Address: "http://localhost:7230"},
-	{Address: "http://localhost:9001"},
-	{Address: "http://localhost:8002"},
-}
-
 func TestIntegration(t *testing.T) {
-	startEchoServers(t, servers)
+	config, err := configparser.ParseConfig()
+	if err != nil {
+		t.Fatalf("Cannot parse config %v", err)
+	}
+
+	servers := parseServers(config.BackendServers)
+	var wg sync.WaitGroup
+	go startServers(servers, &wg)
+	wg.Wait()
+
 	go main()
 
-	// Time for servers to start
-	time.Sleep(2 * time.Second)
-
-	testData := []byte("test_data")
-	for i := 0; i < 10; i++ {
-		testLoadBalancer(t, "localhost:8080", testData)
+	testData := "test_data"
+	for i := 0; i <= 10; i++ {
+		testLoadBalancer(t, config.General.BindAddress, testData)
 	}
 }
 
 func TestHealthcheckIntegration(t *testing.T) {
+	config, err := configparser.ParseConfig()
+	if err != nil {
+		t.Fatalf("Cannot parse config %v", err)
+	}
+
+	servers := parseServers(config.BackendServers)
 	// Not running third server
-	startEchoServers(t, servers[:2])
-	time.Sleep(1 * time.Second)
+	var wg sync.WaitGroup
+	go startServers(servers, &wg)
+	wg.Wait()
 
 	go main()
-
-	// Time for servers to start
-	time.Sleep(2 * time.Second)
 
 	healthyServers := getHealthyServers(servers)
 	if len(healthyServers) != 2 {
@@ -51,86 +53,41 @@ func TestHealthcheckIntegration(t *testing.T) {
 	}
 }
 
-func startEchoServers(t *testing.T, servers []loadbalancer.Server) {
-	var wg sync.WaitGroup
-	errChan := make(chan error)
-	echoServer := func(addr string) {
-		parsedUrl, _ := url.Parse(addr)
-		host := parsedUrl.Hostname()
-		port := parsedUrl.Port()
-		address := fmt.Sprintf("%s:%s", host, port)
-
-		listener, err := net.Listen("tcp", address)
-		if err != nil {
-			errChan <- err
-			return
-		}
-		defer listener.Close()
-
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				t.Logf("Echo server accept error: %v", err)
-				return
-			}
-
-			wg.Add(1)
-			go func(conn net.Conn) {
-				defer wg.Done()
-				defer conn.Close()
-				buf := make([]byte, 1024)
-				for {
-					n, err := conn.Read(buf)
-					if err != nil {
-						return
-					}
-					responseBody := string(buf)
-					responseHeaders := fmt.Sprintf("HTTP/1.1 200 OK\r\n"+
-						"Content-Length: %d\r\n"+
-						"Content-Type: text/plain\r\n"+
-						"\r\n", len(responseBody))
-
-					conn.Write([]byte(responseHeaders + responseBody[:n]))
-				}
-			}(conn)
-		}
-	}
-
+func startServers(servers []loadbalancer.Server, wg *sync.WaitGroup) {
 	for _, s := range servers {
-		go echoServer(s.Address)
-	}
+		wg.Add(1)
+		go func(address string) {
+			defer wg.Done()
+			mux := http.NewServeMux()
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				var body = make([]byte, 1000)
+				r.Body.Read(body)
+				w.Write([]byte(body))
+			})
 
-	go func() {
-		wg.Wait()
-		close(errChan)
-	}()
+			mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(200)
+			})
 
-	for err := range errChan {
-		if err != nil {
-			t.Fatalf("Error setting up echo server: %v", err)
-		}
+			http.ListenAndServe(address, mux)
+		}(s.Address)
 	}
 }
 
-func testLoadBalancer(t *testing.T, address string, testData []byte) {
-	conn, err := net.Dial("tcp", address)
+func testLoadBalancer(t *testing.T, address string, testData string) {
+	r := strings.NewReader(testData)
+	req, err := http.NewRequest(http.MethodPost, "http://"+address, r)
 	if err != nil {
-		t.Fatalf("Failed to connect: %v", err)
+		t.Fatalf("Cannot create new request: %v", err)
 	}
-	defer conn.Close()
-
-	conn.Write(testData)
-
-	buf := make([]byte, 1000)
-	_, err = conn.Read(buf)
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("Failed to read from connection: %v", err)
+		t.Fatalf("Error sending request %v", err)
 	}
 
-	resp := strings.Split(string(buf), "\n")
-	respBody := resp[len(resp)-1]
-
-	if strings.Compare(respBody, string(testData)) == 0 {
-		t.Fatalf("Expected %s, got %s", testData, respBody)
+	respBody := make([]byte, len(testData))
+	res.Body.Read(respBody)
+	if string(respBody) != string(testData) {
+		t.Fatalf("Response is not equal to testData. expected=%s, got=%s.", string(testData), string(respBody))
 	}
 }

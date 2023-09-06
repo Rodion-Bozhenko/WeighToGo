@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net"
-	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -13,26 +12,6 @@ import (
 	"weightogo/logger"
 )
 
-func startServers(servers []loadbalancer.Server, wg *sync.WaitGroup) {
-	for _, s := range servers {
-		wg.Add(1)
-		go func(address string) {
-			defer wg.Done()
-			mux := http.NewServeMux()
-			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-				respBody := fmt.Sprintf("Hello from %s", s.Address)
-				w.Write([]byte(respBody))
-			})
-
-			mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(200)
-			})
-
-			http.ListenAndServe(address, mux)
-		}(s.Address)
-	}
-}
-
 func main() {
 	config, err := configparser.ParseConfig()
 	if err != nil {
@@ -40,19 +19,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	servers := make([]loadbalancer.Server, 0, len(config.BackendServers))
-	for _, s := range config.BackendServers {
-		servers = append(servers, loadbalancer.Server{
-			Address:     s.Address,
-			Weight:      s.Weight,
-			HC_Endpoint: s.HC_Endpoint,
-			HC_Interval: s.HC_Interval,
-		})
-	}
-
-	var wg sync.WaitGroup
-	go startServers(servers, &wg)
-	wg.Wait()
+	servers := parseServers(config.BackendServers)
 
 	listener, err := net.Listen("tcp", config.General.BindAddress)
 	if err != nil {
@@ -80,6 +47,20 @@ func main() {
 	connectionHandler := NewConnectionHandler(listener, lb, logger.Logger)
 
 	connectionHandler.HandleConnection()
+}
+
+func parseServers(backendServers []configparser.BackendServer) []loadbalancer.Server {
+	servers := make([]loadbalancer.Server, 0, len(backendServers))
+	for _, s := range backendServers {
+		servers = append(servers, loadbalancer.Server{
+			Address:     s.Address,
+			Weight:      s.Weight,
+			HC_Endpoint: s.HC_Endpoint,
+			HC_Interval: s.HC_Interval,
+		})
+	}
+
+	return servers
 }
 
 func getHealthyServers(servers []loadbalancer.Server) []loadbalancer.Server {
