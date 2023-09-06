@@ -37,7 +37,7 @@ func TestHealthcheckIntegration(t *testing.T) {
 	servers := parseServers(config.BackendServers)
 	// Not running third server
 	var wg sync.WaitGroup
-	go startServers(servers, &wg)
+	go startServers(servers[:2], &wg)
 	wg.Wait()
 
 	go main()
