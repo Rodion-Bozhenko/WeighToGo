@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -11,10 +12,11 @@ import (
 )
 
 func TestLoadBalancer(t *testing.T) {
-	config, err := configparser.ParseConfig()
+	config, err := configparser.ParseConfig("mock_config.yaml")
 	if err != nil {
 		t.Fatalf("Cannot parse config %v", err)
 	}
+	os.Setenv("WEIGHTOGO_TEST", "true")
 
 	servers := parseServers(config.BackendServers)
 	var wg sync.WaitGroup
@@ -30,7 +32,7 @@ func TestLoadBalancer(t *testing.T) {
 }
 
 func TestHealthcheck(t *testing.T) {
-	config, err := configparser.ParseConfig()
+	config, err := configparser.ParseConfig("mock_config.yaml")
 	if err != nil {
 		t.Fatalf("Cannot parse config %v", err)
 	}

@@ -18,7 +18,7 @@ type ServerWithStatus struct {
 }
 
 func main() {
-	config, err := configparser.ParseConfig()
+	config, err := configparser.ParseConfig("")
 	if err != nil {
 		logger.Logger.Error("Config is not valid.", "err", err)
 		os.Exit(1)

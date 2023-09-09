@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 	"weightogo/loadbalancer"
 	"weightogo/logger"
@@ -42,8 +43,18 @@ type HealthCheck struct {
 	HealthyThreshold   int           `yaml:"healthy_threshold"`
 }
 
-func ParseConfig() (Config, error) {
-	file, err := os.Open("config.yaml")
+func ParseConfig(p string) (Config, error) {
+	path := filepath.Join("/", "etc", "weightogo", "config.yaml")
+	if p != "" {
+		path = p
+	}
+	isTest := os.Getenv("WEIGHTOGO_TEST")
+
+	if isTest == "true" {
+		path = "mock_config.yaml"
+	}
+
+	file, err := os.Open(path)
 	if err != nil {
 		logger.Logger.Error("Cannot open config file.")
 		return Config{}, err
