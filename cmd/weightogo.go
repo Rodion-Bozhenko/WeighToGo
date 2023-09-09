@@ -12,6 +12,11 @@ import (
 	"weightogo/logger"
 )
 
+type ServerWithStatus struct {
+	Server loadbalancer.Server
+	Alive  bool
+}
+
 func main() {
 	config, err := configparser.ParseConfig()
 	if err != nil {
@@ -36,61 +41,108 @@ func main() {
 
 	logger.Logger.Info(fmt.Sprintf("Listening on host: %v, port: %v", host, port))
 
-	aliveServers := getHealthyServers(servers)
+	initializeServersStatus(servers)
 
-	if len(aliveServers) == 0 {
+	var c int
+	for _, s := range servers {
+		if !s.Alive {
+			c++
+		}
+	}
+	if len(servers) == c {
 		logger.Logger.Error("No available servers. Health check failed on each server.")
 		os.Exit(0)
 	}
 
-	lb := loadbalancer.GetLoadBalancer(config.Strategy, aliveServers)
+	lb := loadbalancer.GetLoadBalancer(config.Strategy, servers)
 	connectionHandler := NewConnectionHandler(listener, lb, logger.Logger)
+
+	go healthCheckServers(servers)
 
 	connectionHandler.HandleConnection()
 }
 
-func parseServers(backendServers []configparser.BackendServer) []loadbalancer.Server {
-	servers := make([]loadbalancer.Server, 0, len(backendServers))
+func parseServers(backendServers []configparser.BackendServer) []*loadbalancer.Server {
+	servers := make([]*loadbalancer.Server, 0, len(backendServers))
 	for _, s := range backendServers {
-		servers = append(servers, loadbalancer.Server{
+		servers = append(servers, &loadbalancer.Server{
 			Address:     s.Address,
 			Weight:      s.Weight,
 			HC_Endpoint: s.HC_Endpoint,
 			HC_Interval: s.HC_Interval,
+			Alive:       false,
 		})
 	}
 
 	return servers
 }
 
-func getHealthyServers(servers []loadbalancer.Server) []loadbalancer.Server {
-	ch := make(chan loadbalancer.Server, len(servers))
+func initializeServersStatus(servers []*loadbalancer.Server) {
 	var wg sync.WaitGroup
+	var mu sync.Mutex
 
 	for _, s := range servers {
 		wg.Add(1)
-		go func(s loadbalancer.Server) {
+		go func(s *loadbalancer.Server) {
 			defer wg.Done()
+
 			address := "http://" + s.Address + s.HC_Endpoint
 			alive, err := healthcheck.IsAlive(address, time.Second*5)
 			if err != nil {
-				logger.Logger.Error(fmt.Sprintf("Unable to healthcheck server %s", s.Address), "err", err)
+				logger.Logger.Warn(fmt.Sprintf("Unable to healthcheck server %s", s.Address), "err", err)
 			}
 			if alive {
-				ch <- s
+				mu.Lock()
+				s.Alive = true
+				mu.Unlock()
 			}
 		}(s)
 	}
 
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
+	wg.Wait()
+}
 
-	var aliveServers []loadbalancer.Server
-	for s := range ch {
-		aliveServers = append(aliveServers, s)
+func healthCheckServers(servers []*loadbalancer.Server) {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for _, s := range servers {
+		wg.Add(1)
+		go func(s *loadbalancer.Server) {
+			defer wg.Done()
+
+			ticker := time.NewTicker(s.HC_Interval)
+			quit := make(chan struct{})
+			for {
+				select {
+				case <-ticker.C:
+					address := "http://" + s.Address + s.HC_Endpoint
+					alive, err := healthcheck.IsAlive(address, time.Second*5)
+					if err != nil {
+						logger.Logger.Warn(fmt.Sprintf("Unable to healthcheck server %s", s.Address), "err", err)
+						if s.Alive {
+							mu.Lock()
+							s.Alive = false
+							mu.Unlock()
+						}
+						close(quit)
+					}
+					if !s.Alive && alive {
+						mu.Lock()
+						s.Alive = true
+						mu.Unlock()
+					} else if s.Alive && !alive {
+						mu.Lock()
+						s.Alive = false
+						mu.Unlock()
+					}
+				case <-quit:
+					ticker.Stop()
+					return
+				}
+			}
+		}(s)
 	}
 
-	return aliveServers
+	wg.Wait()
 }
