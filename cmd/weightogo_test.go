@@ -5,11 +5,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"weightogo/configparser"
 	"weightogo/loadbalancer"
 )
 
-func TestIntegration(t *testing.T) {
+func TestLoadBalancer(t *testing.T) {
 	config, err := configparser.ParseConfig()
 	if err != nil {
 		t.Fatalf("Cannot parse config %v", err)
@@ -28,7 +29,7 @@ func TestIntegration(t *testing.T) {
 	}
 }
 
-func TestHealthcheckIntegration(t *testing.T) {
+func TestHealthcheck(t *testing.T) {
 	config, err := configparser.ParseConfig()
 	if err != nil {
 		t.Fatalf("Cannot parse config %v", err)
@@ -40,20 +41,36 @@ func TestHealthcheckIntegration(t *testing.T) {
 	go startServers(servers[:2], &wg)
 	wg.Wait()
 
-	go main()
-
-	healthyServers := getHealthyServers(servers)
-	if len(healthyServers) != 2 {
-		t.Fatalf("Expected 2 healthy servers, got %d", len(healthyServers))
-	}
-	for _, server := range healthyServers {
-		if server.Address == "http://localhost:8002" {
-			t.Fatal("localhost:8002 should not be marked as healthy")
+	initializeServersStatus(servers)
+	var c int
+	for _, s := range servers {
+		if s.Alive {
+			c++
 		}
+	}
+	if c != 2 {
+		t.Fatalf("Expected 2 healthy servers, got %d", c)
+	}
+
+	// Check if start initially not started server will change server status
+	go startServers(servers[2:], &wg)
+	wg.Wait()
+	go healthCheckServers(servers)
+
+	time.Sleep(servers[2].HC_Interval + time.Second)
+
+	var c2 int
+	for _, s := range servers {
+		if s.Alive {
+			c2++
+		}
+	}
+	if c2 != 3 {
+		t.Fatalf("Expected 3 healthy servers, got %d", c)
 	}
 }
 
-func startServers(servers []loadbalancer.Server, wg *sync.WaitGroup) {
+func startServers(servers []*loadbalancer.Server, wg *sync.WaitGroup) {
 	for _, s := range servers {
 		wg.Add(1)
 		go func(address string) {

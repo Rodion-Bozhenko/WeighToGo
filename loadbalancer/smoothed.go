@@ -1,7 +1,7 @@
 package loadbalancer
 
 type SmoothedLoadBalancer struct {
-	Servers []Server
+	Servers []*Server
 }
 
 func (sw *SmoothedLoadBalancer) PickServer() *Server {
@@ -12,7 +12,7 @@ func (sw *SmoothedLoadBalancer) PickServer() *Server {
 		sw.Servers[i].CurrentWeight += sw.Servers[i].Weight
 
 		if best == nil || sw.Servers[i].CurrentWeight > best.CurrentWeight {
-			best = &sw.Servers[i]
+			best = sw.Servers[i]
 		}
 	}
 	best.CurrentWeight -= total

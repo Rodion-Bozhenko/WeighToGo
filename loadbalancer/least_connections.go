@@ -5,7 +5,7 @@ import (
 )
 
 type LeastConnectionsLoadBalancer struct {
-	Servers []Server
+	Servers []*Server
 }
 
 func (s *Server) IncreaseConnections() {
@@ -19,7 +19,10 @@ func (s *Server) DecreaseConnections() {
 func (lb *LeastConnectionsLoadBalancer) PickServer() *Server {
 	var best *Server
 	for i := 0; i < len(lb.Servers); i++ {
-		s := &lb.Servers[i]
+		s := lb.Servers[i]
+		if !s.Alive {
+			continue
+		}
 		if best == nil || s.ActiveConnections < best.ActiveConnections {
 			best = s
 		}

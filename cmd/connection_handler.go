@@ -30,6 +30,12 @@ func (ch *ConnectionHandler) HandleConnection() {
 		}
 
 		targetServer := ch.LoadBalancer.PickServer()
+		if !targetServer.Alive {
+			for !targetServer.Alive {
+				targetServer = ch.LoadBalancer.PickServer()
+			}
+		}
+
 		targetAddr := targetServer.Address
 		targetServer.IncreaseConnections()
 

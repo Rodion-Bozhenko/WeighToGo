@@ -11,6 +11,7 @@ type Server struct {
 	ActiveConnections int64
 	HC_Endpoint       string
 	HC_Interval       time.Duration
+	Alive             bool
 }
 
 type LoadBalancer interface {
@@ -25,7 +26,7 @@ const (
 	LeastConnections   Strategy = "LeastConnections"
 )
 
-func GetLoadBalancer(strategy Strategy, servers []Server) LoadBalancer {
+func GetLoadBalancer(strategy Strategy, servers []*Server) LoadBalancer {
 	switch strategy {
 	case RoundRobin:
 		return &RoundRobinLoadBalancer{Servers: servers, Count: 0}
