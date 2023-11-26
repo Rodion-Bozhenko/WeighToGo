@@ -12,6 +12,7 @@ import (
 	"weightogo/logger"
 )
 
+// ServerWithStatus shows if Server is alive
 type ServerWithStatus struct {
 	Server loadbalancer.Server
 	Alive  bool
@@ -66,11 +67,11 @@ func parseServers(backendServers []configparser.BackendServer) []*loadbalancer.S
 	servers := make([]*loadbalancer.Server, 0, len(backendServers))
 	for _, s := range backendServers {
 		servers = append(servers, &loadbalancer.Server{
-			Address:     s.Address,
-			Weight:      s.Weight,
-			HC_Endpoint: s.HC_Endpoint,
-			HC_Interval: s.HC_Interval,
-			Alive:       false,
+			Address:    s.Address,
+			Weight:     s.Weight,
+			HCEndpoint: s.HCEndpoint,
+			HCInterval: s.HCInterval,
+			Alive:      false,
 		})
 	}
 

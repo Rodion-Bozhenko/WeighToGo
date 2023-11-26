@@ -1,3 +1,4 @@
+// Main package
 package main
 
 import (
@@ -7,12 +8,16 @@ import (
 	"weightogo/loadbalancer"
 )
 
+// ConnectionHandler responsible for connecting to servers.
+// Picking servers using pattern for picking provided via
+// LoadBalancer.
 type ConnectionHandler struct {
 	Listener     net.Listener
 	LoadBalancer loadbalancer.LoadBalancer
 	Logger       *slog.Logger
 }
 
+// NewConnectionHandler return pointer to new ConnectionHandler
 func NewConnectionHandler(listener net.Listener, lb loadbalancer.LoadBalancer, logger *slog.Logger) *ConnectionHandler {
 	return &ConnectionHandler{
 		Listener:     listener,
@@ -21,6 +26,7 @@ func NewConnectionHandler(listener net.Listener, lb loadbalancer.LoadBalancer, l
 	}
 }
 
+// HandleConnection method responsible for connecting to servers
 func (ch *ConnectionHandler) HandleConnection() {
 	for {
 		clientConn, err := ch.Listener.Accept()

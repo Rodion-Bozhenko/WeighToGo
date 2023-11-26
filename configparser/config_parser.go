@@ -1,3 +1,5 @@
+// Package configparser responsible for parsing yaml config
+// into Config struct which contains load balancer settings
 package configparser
 
 import (
@@ -13,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Config contains loadbalancer settings parsed from yaml config file
 type Config struct {
 	General struct {
 		BindAddress string        `yaml:"bind_address"`
@@ -25,16 +28,18 @@ type Config struct {
 	HealthCheck    HealthCheck           `yaml:"health_check"`
 }
 
+// BackendServer contains loadbalancer settings for each individual server
 type BackendServer struct {
 	Address           string        `yaml:"address"`
 	Weight            int           `yaml:"weight"`
 	MaxConn           int           `yaml:"max_connections"`
-	HC_Endpoint       string        `yaml:"hc_endpoint"`
-	HC_Interval       time.Duration `yaml:"hc_interval"`
+	HCEndpoint        string        `yaml:"hc_endpoint"`
+	HCInterval        time.Duration `yaml:"hc_interval"`
 	CurrentWeight     int
 	ActiveConnections int64
 }
 
+// HealthCheck contains healthcheck settings
 type HealthCheck struct {
 	Enabled            bool          `yaml:"enabled"`
 	Interval           time.Duration `yaml:"interval"`
@@ -43,6 +48,8 @@ type HealthCheck struct {
 	HealthyThreshold   int           `yaml:"healthy_threshold"`
 }
 
+// ParseConfig parses yaml load balancer config into Config struct
+// Returns Config struct and error
 func ParseConfig(p string) (Config, error) {
 	path := filepath.Join("/", "etc", "weightogo", "config.yaml")
 	if p != "" {
@@ -82,22 +89,22 @@ func ParseConfig(p string) (Config, error) {
 
 func validateConfig(cfg *Config) error {
 	if cfg.General.BindAddress == "" {
-		return errors.New("Bind address wasn't provided.")
+		return errors.New("bind address wasn't provided")
 	}
 
 	if len(cfg.BackendServers) == 0 {
-		return errors.New("Backend servers wasn't provided.")
+		return errors.New("backend servers wasn't provided")
 	}
 
 	for i, s := range cfg.BackendServers {
 		if s.Address == "" {
-			return errors.New(fmt.Sprintf("Miss address for backend server #%d.", i))
+			return fmt.Errorf("miss address for backend server #%d", i)
 		}
 	}
 
 	if !isValidStrategy(cfg.Strategy) {
 		validStrategies := fmt.Sprintf("%s, %s, %s", loadbalancer.RoundRobin, loadbalancer.WeightedRoundRobin, loadbalancer.LeastConnections)
-		return errors.New(fmt.Sprintf("Provided strategy %s is invalid. Valid strategies: %s.", cfg.Strategy, validStrategies))
+		return fmt.Errorf("provided strategy %s is invalid. Valid strategies: %s", cfg.Strategy, validStrategies)
 	}
 
 	return nil
