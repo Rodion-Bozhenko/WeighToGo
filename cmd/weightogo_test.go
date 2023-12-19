@@ -59,7 +59,7 @@ func TestHealthcheck(t *testing.T) {
 	wg.Wait()
 	go healthCheckServers(servers)
 
-	time.Sleep(servers[2].HC_Interval + time.Second)
+	time.Sleep(servers[2].HCInterval + time.Second)
 
 	var c2 int
 	for _, s := range servers {

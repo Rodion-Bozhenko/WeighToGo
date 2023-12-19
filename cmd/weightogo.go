@@ -87,7 +87,7 @@ func initializeServersStatus(servers []*loadbalancer.Server) {
 		go func(s *loadbalancer.Server) {
 			defer wg.Done()
 
-			address := "http://" + s.Address + s.HC_Endpoint
+			address := "http://" + s.Address + s.HCEndpoint
 			alive, err := healthcheck.IsAlive(address, time.Second*5)
 			if err != nil {
 				logger.Logger.Warn(fmt.Sprintf("Unable to healthcheck server %s", s.Address), "err", err)
@@ -112,12 +112,12 @@ func healthCheckServers(servers []*loadbalancer.Server) {
 		go func(s *loadbalancer.Server) {
 			defer wg.Done()
 
-			ticker := time.NewTicker(s.HC_Interval)
+			ticker := time.NewTicker(s.HCInterval)
 			quit := make(chan struct{})
 			for {
 				select {
 				case <-ticker.C:
-					address := "http://" + s.Address + s.HC_Endpoint
+					address := "http://" + s.Address + s.HCEndpoint
 					alive, err := healthcheck.IsAlive(address, time.Second*5)
 					if err != nil {
 						logger.Logger.Warn(fmt.Sprintf("Unable to healthcheck server %s", s.Address), "err", err)
